@@ -1,1342 +1,1024 @@
-![](README.assets/pic1.jpg)
+ 
 
-![](README.assets/pic2.jpg)
+# 1. Overview
 
-# 0.Changelog
+CR robots now support two remote control modes: **remote I/O mode** and **remote Modbus mode**. For details about the control mode, please see Software Usage Instructions > Settings > Remote Control in *Dobot-CR-Series Robot-App-User-Guide-V3.7*. 
 
-- V1.0-2021/05/27：建立文档
-- V1.1-2021/07/05：修正一些运动指令的参数错误
-- V1.2-2021/07/08：主要新增RobotMode机器人模式以及文档书写错误
-- V1.3-2021/07/13：更新返回数据表格
-- V1.4-2021/07/16: Arc3 改为Arc : 与新版MG400指令一致；ServoJ的参数不能以表的形式，因为一次只能下发一个点，ServoP相同；文档中是1440字节，不是1044。
-- V1.5-2021/07/23: 数据的结构体去除掉添加一个是字节位置值；对RobotMode的状态优先级进行描述；新增机器人上电接口。
-- V1.6-2021/08/04:调整Dashboard端口和实时反馈端口表格位置；根据xk项目，新增运行脚本、读写保存寄存器、获取机器人状态等指令；
-- V1.7-2021/08/23:添加Sync指令、SetArmOrientation描述优化、电子皮肤SetObstacleAvoid、SetSafeSkin相关指令、轨迹复现相关指令GetTraceStartPose、GetPathStartPose、StartTrace、StartPath以及正解逆解接口InverseSolution、PositiveSolution；以及若干书写错误；
+The above two modes are mainly for the **remote control of running scripts**. As the communication based on TCP/IP has high reliability, strong practicability and high performance with low cost, many industrial automation projects have a wide demand for control robots that support TCP/IP protocol. So CR robots, designed on the basis of TCP/IP protocol, provide rich interfaces for interaction with external devices.
 
+# 2. Message Format
 
+According to the design, CR robots will open 29999 and 30003 server ports; 29999 server port (hereinafter referred to as Dashboard port) is responsible for receiving some simple instructions by sending and receiving one by one. That is, **after receiving the agreed message format from the client, the Dashboard port will give feedback to the client.** 30003 server port (hereinafter referred to as the real-time feedback port) **feeds back the robot information every 8 ms. It only receives the agreed message format from the client but does not give feedback.**
 
-# 1. 综述
+## 2.1 Format for sending messages
 
-​	CR机器人现支持两种远程控制方式：**远程I/O模式、远程Modbus模式**；具体控制方式详见《Dobot-CR-Series-Robot-APP-User-Guide-V3.7》文档中软件使用说明->设置->远程控制章节中；
+​	`Message name(Param1,Param2,Param3……Paramn)`
 
-​	以上两种方式主要针对**远程运行脚本的控制**；由于基于TCP/IP的通讯具有成本低、可靠性高、实用性强、性能高等特点；许多工业自动化项目对支持TCP/IP协议控制机器人需求广泛，因此CR机器人将设计在TCP/IP协议的基础上，提供了丰富的接口用于与外部设备的交互；
+The message format is shown as above. It consists of a message name, parameters in a bracket. Each parameter is separated by an English comma “,”. A  complete message ends up with right parenthesis. 
 
-# 2.消息格式
+Both message commands and message responses are in ASCII format (string).
 
-​	根据设计，CR机器人可以开启29999以及30003服务器端口；29999服务器端口(以下简称Dashboard端口)通过一发一收的方式负责接收一些简单的指令，即**Dashboard端口接收到客户端约定消息格式后会将结果反馈客户端**；30003服务器端口(以下简称实时反馈端口)**每8ms反馈机器人的信息，仅接收客户端的约定消息格式，不做反馈**；
+## 2.2 Format for Feedback
 
-## 2.1 下发格式
+### 2.2.1 Feedback when receiving successfully
 
-​	`消息名称(Param1,Param2,Param3……Paramn)`
-​	消息格式如上所示，由一个消息名称，括号内由参数组成， 每一个参数之间以英文逗号  ”,”  相隔，一个完整的消息以右括号结束。
+​	`"Message name(Param1,Param2,Param3……Paramn)"`
 
-​	消息命令与消息应答都是 ASCII 码格式(字符串形式)。
+It returns the message name, as shown above.
 
-## 2.2 返回格式
+### 2.2.2 Feedback when failing to receive
 
-### 2.2.1接收成功返回：
+​	`"could not understand:'Message name(Param1,Param2,Param3……Paramn)'"`
 
-​	`"消息名称(Param1,Param2,Param3……Paramn)"`
-
-​	消息格式如上所示，成功返回下发的消息名称。
-
-### 2.2.2 失败返回：
-
-​	`"could not understand:'消息名称(Param1,Param2,Param3……Paramn)'"`
-
-​	消息格式如上所示，失败返回could not understand:'消息名称(Param1,Param2,Param3……Paramn)'。
+It returns "could not understand:'Message name(Param1,Param2,Param3……Paramn)'", as shown above.
 
 
 
-# 3.通信协议---Dashboard端口
+# 3. Communication Protocol—Dashboard Port
 
-​	上位机可以通过29999端口直接发送一些简单的指令给机器人，这些指令CR自己定义的，这些功能被称为Dashboard。如表是Dashboard的指令列表。可以通过Dashboard的指令实现对机器人使能/下使能、复位等控制；
+The upper computer can directly send some simple instructions to the robot through 29999 port. These instructions are defined by CR, and these functions are called Dashboard. The table below is the Dashboard instruction list. The Dashboard commands can be used to control the robot, including enabling/disabling and resetting the robot.
 
-| 指令                | 描述                                       |
-| ----------------- | ---------------------------------------- |
-| EnableRobot       | 使能机器人                                    |
-| DisableRobot      | 去使能机器人                                   |
-| ClearError        | 复位，用于清除错误                                |
-| ResetRobot        | 机器人停止当前动作，重新接收使能，规划停                     |
-| SpeedFactor       | 设置全局速率比                                  |
-| User              | 选择已标定的用户坐标系（笛卡尔空间显示值 实际生效根据点）            |
-| Tool              | 选择已标定的刀具坐标系                              |
-| RobotMode         | 机器人模式                                    |
-| PayLoad           | 设置负载                                     |
-| DO                | 设置数字量输出端口状态                              |
-| DOExecute         | 设置数字量输出端口状态（立即指令）                        |
-| ToolDO            | 设置末端数字量输出端口状态                            |
-| ToolDOExecute     | 设置末端数字量输出端口状态（立即指令）                      |
-| AO                | 设置模拟量输出端口状态                              |
-| AOExecute         | 设置模拟量输出端口状态（立即指令）                        |
-| AccJ              | 设置关节加速度比例。该指令仅对MovJ、MovJIO、MovJR、 JointMovJ指令有效 |
-| AccL              | 设置笛卡尔加速度比例。该指令仅对MovL、MovLIO、MovLR、Jump、Arc、Circle指令有效。 |
-| SpeedJ            | 设置关节速度比例。该指令仅对MovJ、MovJIO、MovJR、 JointMovJ指令有效。 |
-| SpeedL            | 设置笛卡尔速度比例。该指令仅对MovL、MovLIO、MovLR、Jump、Arc、Circle指令有效。 |
-| Arch              | 设置Jump门型参数索引（起始点抬升高度、最大抬 升高度、结束点下降高度）    |
-| CP                | 运动时设置平滑过渡                                |
-| LimZ              | 设置Jump模式最大抬升高度                           |
-| SetArmOrientation | 设置手系                                     |
-| PowerOn           | 机器人上电                                    |
-| RunScript         | 运行脚本                                     |
-| StopScript        | 停止脚本                                     |
-| PauseScript       | 暂停脚本                                     |
-| ContinueScript    | 继续脚本                                     |
-| GetHoldRegs       | 读保存寄存器                                   |
-| SetHoldRegs       | 写保存寄存器                                   |
-| SetSafeSkin       | 设置安全皮肤开关状态                               |
-| SetObstacleAvoid  | 设置安全皮肤避障模式开关状态                           |
-| GetTraceStartPose | 获取轨迹拟合中首个点位                              |
-| GetPathStartPose  | 获取轨迹复现中首个点位                              |
-| PositiveSolution  | 正解                                       |
-| InverseSolution   | 逆解                                       |
-| ArmOrientation    | 臂方向                                      |
+| Commands          | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| EnableRobot       | enable the robot                                             |
+| DisableRobot      | disable the robot                                            |
+| ClearError        | clear the error of the robot                                 |
+| ResetRobot        | the robot stops its current action, and receives enabling again |
+| SpeedFactor       | set the global speed ratio                                   |
+| User              | select the identified user coordinate system                 |
+| Tool              | select the identified tool coordinate system                 |
+| RobotMode         | mode of robot                                                |
+| PayLoad           | set the current load                                         |
+| DO                | set the status of digital output port                        |
+| DOExecute         | set the status of digital output port (immediate command)    |
+| ToolDO            | set the status of digital output port of the tool            |
+| ToolDOExecute     | set the status of digital output port of the tool (immediate command) |
+| AO                | set the voltage of analog output port of controller          |
+| AOExecute         | set the voltage of analog output port of controller (immediate command) |
+| AccJ              | set the joint acceleration rate. This command is valid only when the motion mode is MovJ, MovJIO, MovJR,  JointMovJ |
+| AccL              | set the Cartesian acceleration rate. This command is valid only when the motion mode is MovL, MovLIO, MovLR, Jump, Arc, Circle |
+| SpeedJ            | set the joint velocity rate. This command is valid only when the motion mode is MovJ, MovJIO, MovJR,  JointMovJ |
+| SpeedL            | set the Cartesian velocity rate. This command is valid only when the motion mode is MovL, MovLIO, MovLR, Jump, Arc, Circle |
+| Arch              | set the index of arc parameters  (StartHeight, zLimit, EndHeight) in the Jump mode |
+| CP                | set the continuous path rate during movement                 |
+| LimZ              | set the maximum lifting height in Jump mode                  |
+| SetArmOrientation | set the orientation of the arm                               |
+| PowerOn           | Power on the robot                                           |
+| RunScript         | run the script                                               |
+| StopScript        | stop the script                                              |
+| PauseScript       | pause the script                                             |
+| ContinueScript    | continue the script                                          |
+| GetHoldRegs       | read the holding register value                              |
+| SetHoldRegs       | write in the holding register                                |
 
 
 
 ## 3.1 EnableRobot
 
-- 功能：使能机器人
+- Function: EnableRobot()
 
-- 格式：EnableRobot()
+- Description: enable the robot
 
-- 参数数量：0
+- Parameters: null
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 示例：
-
+- Example
+    ```
   EnableRobot()
-
+  ```
 
 ## 3.2 DisableRobot
 
-- 功能：下使能机器人
+- Function: DisableRobot()
 
-- 格式：DisableRobot()
+- Description: disable the robot
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-- 示例：
-
+- Example
+    ```
   DisableRobot()
-
+  ```
 
 
 ## 3.3 ClearError
 
-- 功能：清错机器人
+- Function: ClearError()
 
-- 格式：ClearError()
+- Description: clear the error of the robot
 
-- 参数数量：0
+- Parameters: null
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 参数详解：
-
-- 示例：
-
+- Example 
+    ```
   ClearError()
-
+  ```
 ## 3.4 ResetRobot
 
-- 功能：机器人停止
+- Function: ResetRobot()
 
-- 格式：ResetRobot()
+- Description: stop the robot
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 参数详解：
-
-- 示例：
-
+- Example
+    ```
   ResetRobot()
-
+  ```
 ## 3.5 SpeedFactor
 
-- 功能：设置全局速度比例。 
+- Function: SpeedFactor(ratio)
 
-- 格式：SpeedFactor(ratio)
+- Description: set the global speed ratio
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                       |
+  | --------- | ---- | ------------------------------------------------- |
+  | ratio     | int  | speed ratio, range: 0~100, exclusive of 0 and 100 |
 
-- 参数详解：1
-
-  | 参数名   | 类型   | 含义                          |
-  | ----- | ---- | --------------------------- |
-  | ratio | int  | 运动速度比例，取值范围：0~100，但不包括0和100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   SpeedFactor(80)
-
+  ```
 
 ## 3.6 User
 
-- 功能：选择已标定的用户坐标系。 
+- Function: User(index)
 
-- 格式：User(index)
+- Description: select the identified user coordinate system
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                              |
+  | --------- | ---- | -------------------------------------------------------- |
+  | index     | int  | select the identified user coordinate system, range: 0~9 |
 
-- 参数详解：1
-
-  | 参数名   | 类型   | 含义                   |
-  | ----- | ---- | -------------------- |
-  | index | int  | 选择已标定的用户坐标系，取值范围：0~9 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   User(1)
-
+  ```
 ## 3.7 Tool
 
-- 功能：选择已标定的刀具坐标系。 
+- Function: Tool(index)
 
-- 格式：Tool(index)
+- Description: select the identified tool coordinate system
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                              |
+  | --------- | ---- | -------------------------------------------------------- |
+  | index     | int  | select the identified tool coordinate system, range: 0~9 |
 
-- 参数详解：1
-
-  | 参数名   | 类型   | 含义                   |
-  | ----- | ---- | -------------------- |
-  | index | int  | 选择已标定的工具坐标系，取值范围：0~9 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   Tool(1)
-
+  ```
 ## 3.8 **RobotMode**
 
-- 功能：机器人状态。 
+- Function: RobotMode()
 
-- 格式：RobotMode()
+- Description: mode of robot
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-- 示例：
-
+- Example
+    ```
   RobotMode()
+  ```
+- Return:                              
 
-- 返回值：                             
-
-  | 模式   | 描述                           | 备注     |
-  | ---- | ---------------------------- | ------ |
-  | -1   | ROBOT_MODE_NO_CONTROLLER     | 没有控制器  |
-  | 0    | ROBOT_MODE_DISCONNECTED      | 没有连接   |
-  | 1    | ROBOT_MODE_CONFIRM_SAFETY    | 配置安全参数 |
-  | 2    | ROBOT_MODE_BOOTING           | 启动     |
-  | 3    | ROBOT_MODE_POWER_OFF         | 下电     |
-  | 4    | ROBOT_MODE_POWER_ON          | 上电     |
-  | 5    | ROBOT_MODE_IDLE              | 空闲     |
-  | 6    | ROBOT_MODE_BACKDRIVE         | 拖拽     |
-  | 7    | ROBOT_MODE_RUNNING           | 运行     |
-  | 8    | ROBOT_MODE_UPDATING_FIRMWARE | 更新固件   |
-  | 9    | ROBOT_MODE_ERROR             | 报警     |
+  | Mode | Description                   | Note                        |
+  | ---- | ----------------------------- | --------------------------- |
+  | -1   | ROBOT_MODE_NO_CONTROLLER      | No controller               |
+  | 0    | ROBOT_MODE_DISCONNECTED       | Disconnect                  |
+  | 1    | ROBOT_MODE_CONFIRM_SAFETY     | Configure safety parameters |
+  | 2    | ROBOT_MODE_BOOTING            | Start                       |
+  | 3    | ROBOT_MODE_POWER_OFF          | Power off                   |
+  | 4    | ROBOT_MODE_POWER_ON           | Power on                    |
+  | 5    | ROBOT_MODE_IDLE               | Idle                        |
+  | 6    | ROBOT_MODE_BACKDRIVE          | Drag                        |
+  | 7    | ROBOT_MODE_RUNNING            | Run                         |
+  | 8    | ROBOT_MODE_UPDATING_FIRMWAREu | Update firmware             |
+  | 9    | ROBOT_MODE_ERROR              | Alarm                       |
 
 ## 3.9 PayLoad
 
-- 功能：设置当前的负载
+- Function: PayLoad(weight,inertia)
 
-- 格式：PayLoad(weight,inertia)
+- Description: set the current load
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type   | Description       |
+  | --------- | ------ | ----------------- |
+  | weight    | double | load weight kg    |
+  | inertia   | double | load inertia kgm² |
 
-
-
-- 参数详解：2
-
-  | 参数名     | 类型     | 含义        |
-  | ------- | ------ | --------- |
-  | weight  | double | 负载重量 kg   |
-  | inertia | double | 负载惯量 kgm² |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   PayLoad(3,0.4)
-
+  ```
 ## 3.10 DO
 
-- 功能：设置数字输出端口状态（队列指令） 
+- Function: DO(index,0/1)
 
-- 格式：DO(index,status)
+- Description: set the status of digital output port (queue command)
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                                  |
+  | --------- | ---- | ------------------------------------------------------------ |
+  | index     | int  | digital output index, range: 1~24                            |
+  | 0/1       | bool | status of the digital output port. 1: High level; 0: Low level |
 
-
-
-- 参数详解：2
-
-  | 参数名    | 类型   | 含义                   |
-  | ------ | ---- | -------------------- |
-  | index  | int  | 数字输出索引，取值范围：1~24     |
-  | status | int  | 数字输出端口状态，1：高电平；0：低电平 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   DO(1,1)
-
+  ```
 ## 3.11 DOExecute
 
-- 功能：设置数字输出端口状态（立即指令）
+- Function: DOExecute(index,0/1)
 
-- 格式：DOExecute(index,status)
+- Description: set the status of digital output port (immediate command)  
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                                  |
+  | --------- | ---- | ------------------------------------------------------------ |
+  | index     | int  | digital output index, range: 1~16                            |
+  | 0/1       | boo  | status of the digital output port. 1: High level; 0: Low level |
 
-
-
-- 参数详解：2
-
-  | 参数名    | 类型   | 含义                   |
-  | ------ | ---- | -------------------- |
-  | index  | int  | 数字输出索引，取值范围：1~16     |
-  | status | int  | 数字输出端口状态，1：高电平；0：低电平 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   DOExecute(1,1)
-
+  ```
 ## 3.12 ToolDO
 
-- 功能：设置末端数字输出端口状态（队列指令)
+- Function: ToolDO(index,0/1)
 
-- 格式：ToolDO(index,status)
+- Description: set the status of digital output port  of the tool (queue command)
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                                |
+  | --------- | ---- | ---------------------------------------------------------- |
+  | index     | int  | digital output index, range: 1 or 2                        |
+  | 0/1       | bool | status of digital output port. 1: high level, 0: low level |
 
-
-
-- 参数详解：2
-
-  | 参数名    | 类型   | 含义                   |
-  | ------ | ---- | -------------------- |
-  | index  | int  | 数字输出索引，取值范围：1/2      |
-  | status | int  | 数字输出端口状态，1：高电平；0：低电平 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   ToolDO(1,1)
-
+  ```
 ## 3.13 ToolDOExecute
 
-- 功能：设置末端数字输出端口状态（立即指令)
+- Function: ToolDOExecute(index,0/1)
 
-- 格式：ToolDOExecute(index,status)
+- Description: set the status of digital output port of the tool (immediate command) 
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                                                  |
+  | --------- | ---- | ------------------------------------------------------------ |
+  | index     | int  | digital output index, range: 1 or 2                          |
+  | 0/1       | bool | status of the digital output port. 1: high level; 0: low level |
 
-
-
-- 参数详解：2
-
-  | 参数名    | 类型   | 含义                   |
-  | ------ | ---- | -------------------- |
-  | index  | int  | 数字输出索引，取值范围：1/2      |
-  | status | int  | 数字输出端口状态，1：高电平；0：低电平 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   ToolDOExecute(1,1)
-
+  ```
 ## 3.14 AO
 
-- 功能：设置控制柜模拟输出端口的电压值（队列指令）
+- Function: AO(index,value)
 
-- 格式：AO(index,value)
+- Description: set the voltage of analog output port of controller (queue command)
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type   | Description                                 |
+  | --------- | ------ | ------------------------------------------- |
+  | index     | int    | analog output index, range: 1 or 2          |
+  | value     | double | voltage of corresponding index, range: 0~10 |
 
-
-
-- 参数详解：2
-
-  | 参数名   | 类型     | 含义                    |
-  | ----- | ------ | --------------------- |
-  | index | int    | 模拟输出索引，取值范围：1/2       |
-  | value | double | 对应index的电压值，取值范围0~10V |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   AO(1,2)
-
+  ```
 ## 3.15 AOExecute
 
-- 功能：设置控制柜模拟输出端口的电压值（立即指令）
+- Function: AOExecute(index,value)
 
-- 格式：AOExecute(index,value)
+- Description: set the voltage of analog output port of controller (immediate command)
 
-- 参数数量：2
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type   | Description                                 |
+  | --------- | ------ | ------------------------------------------- |
+  | index     | int    | analog output index, range: 1 or 2          |
+  | value     | double | voltage of corresponding index, range: 0~10 |
 
-
-
-- 参数详解：2
-
-  | 参数名   | 类型     | 含义                    |
-  | ----- | ------ | --------------------- |
-  | index | int    | 模拟输出索引，取值范围：1/2       |
-  | value | double | 对应index的电压值，取值范围0~10V |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   AOExecute(1,2)
-
+  ```
 
 ## 3.16 AccJ
 
-- 功能：设置关节加速度比例。该指令仅对MovJ、MovJIO、MovJR、 JointMovJ指令有效
+- Function: AccJ(R)
 
-- 格式：AccJ,R)
+- Description: set the joint acceleration rate. This command is valid only when the motion mode is MovJ, MovJIO, MovJR,  JointMovJ
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                           |
+  | --------- | ---- | ------------------------------------- |
+  | R         | int  | joint acceleration rate, range: 1~100 |
 
-
-
-- 参数详解：1
-
-  | 参数名  | 类型   | 含义                  |
-  | ---- | ---- | ------------------- |
-  | R    | int  | 关节加速度百分比，取值范围：1~100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   AccJ(50)
-
+  ```
 ## 3.17 AccL
 
-- 功能：设置笛卡尔加速度比例。该指令仅对MovL、MovLIO、MovLR、Jump、Arc、Circle指令有效。 
+- Function: AccL(R)
 
-- 格式：AccL(R)
+- Description: set the Cartesian acceleration rate. This command is valid only when the motion mode is MovL, MovLIO, MovLR, Jump, Arc, Circle
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                               |
+  | --------- | ---- | ----------------------------------------- |
+  | R         | int  | Cartesian acceleration rate, range: 1~100 |
 
-
-
-- 参数详解：1
-
-  | 参数名  | 类型   | 含义                  |
-  | ---- | ---- | ------------------- |
-  | R    | int  | 笛卡尔加速度比例，取值范围：1~100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   AccL(50)
-
+  ```
 ##  3.18 SpeedJ
 
-- 功能：设置关节速度比例。该指令仅对MovJ、MovJIO、MovJR、 JointMovJ指令有效。 
+- Function: SpeedJ(R)
 
-- 格式：SpeedJ(R)
+- Description: set the joint velocity rate. This command is valid only when the motion mode is MovJ, MovJIO, MovJR,  JointMovJ
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                       |
+  | --------- | ---- | --------------------------------- |
+  | R         | int  | joint velocity rate, range: 1~100 |
 
-
-
-- 参数详解：1
-
-  | 参数名  | 类型   | 含义                |
-  | ---- | ---- | ----------------- |
-  | R    | int  | 关节速度比例，取值范围：1~100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   SpeedJ(50)
-
+  ```
 ## 3.19 SpeedL
 
-- 功能：设置笛卡尔速度比例。该指令仅对MovL、MovLIO、MovLR、Jump、Arc、Circle指令有效。 
+- Function: SpeedL(R)
 
-- 格式：SpeedL(R)
+- Description: set the Cartesian velocity rate. This command is valid only when the motion mode is MovL, MovLIO, MovLR, Jump, Arc, Circle
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                           |
+  | --------- | ---- | ------------------------------------- |
+  | R         | int  | Cartesian velocity rate, range: 1~100 |
 
-
-
-- 参数详解：1
-
-  | 参数名  | 类型   | 含义                 |
-  | ---- | ---- | ------------------ |
-  | R    | int  | 笛卡尔速度比例，取值范围：1~100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   SpeedL(50)
-
+  ```
 ## 3.20 Arch
 
-- 功能：设置Jump门型参数索引（起始点抬升高度、最大抬升高度、结束点下降高度）。 
+- Function: Arch(Index)
 
-- 格式：Arch(Index)
+- Description: set the index of arc parameters  (StartHeight, zLimit, EndHeight) in the Jump mode
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                      |
+  | --------- | ---- | -------------------------------- |
+  | Index     | int  | arc parameters index, range: 0~9 |
 
-
-
-- 参数详解：1
-
-  | 参数名   | 类型   | 含义              |
-  | ----- | ---- | --------------- |
-  | Index | int  | 门型参数索引，取值范围：0~9 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   Arch(1)
-
+  ```
 ## 3.21 CP
 
-- 功能：设置CP比例。CP即平滑过渡，机械臂从起始点经过中间点到达终点时，经过中间点是以直角方式过渡还是以曲线方式过渡。该指令对Jump指令无效。 
+- Function: CP(R)
 
-- 格式：CP(R)
+- Description: set CP rate. CP means continuous path, that is, when the robot arm reaches the end point from the starting point through the intermediate point, it passes through the intermediate point in a right angle or in a curve. This command is invalid for Jump mode.
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
+  | Parameter | Type | Description                        |
+  | --------- | ---- | ---------------------------------- |
+  | R         | int  | continuous path rate, range: 1~100 |
 
-
-
-- 参数详解：1
-
-  | 参数名  | 类型   | 含义                |
-  | ---- | ---- | ----------------- |
-  | R    | int  | 平滑过渡比例，取值范围：1~100 |
-
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   CP(50)
-
+  ```
 ## 3.22 LimZ
 
-- 功能：设置Jump模式最大抬升高度。 
-- 格式：LimZ(zValue)
-- 参数数量：1
-- 支持端口：29999
+- Function: LimZ(zValue)
+- Description: set the maximum lifting height in Jump mode
 
 
-- 参数详解：1
+- Parameters: 
 
-  | 参数名    | 类型   | 含义                   |
-  | ------ | ---- | -------------------- |
-  | zValue | int  | 最大抬升高度，不能超过机械臂Z轴极限位置 |
+  | Parameter | Type | Description                                                  |
+  | --------- | ---- | ------------------------------------------------------------ |
+  | zValue    | int  | maximum lifting height which cannot exceed the Z-axis limiting position of the robot |
 
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   LimZ(80)
-
+  ```
 ## 3.23 SetArmOrientation
 
-- 功能：设置手系指令。 
-- 格式：SetArmOrientation(LorR,UorD,ForN,Config6)
-- 参数数量：4
-- 支持端口：29999
+- Function: SetArmOrientation(LorR,UorD,ForN,Config6)
+- Description: set the orientation of the arm
 
 
-- 参数详解：4
+- Parameters: 
 
-  | 参数名     | 类型   | 含义                                       |
-  | ------- | ---- | ---------------------------------------- |
-  | LorR    | int  | 臂方向向前/向后(1/-1)<br /> 1：向前<br />-1：向后     |
-  | UorD    | int  | 臂方向肘上/肘下(1/-1)<br /> 1：肘上<br />-1：肘下     |
-  | ForN    | int  | 臂方向腕部是否翻转(1/-1)<br />  1：腕不翻转<br />-1：腕翻转 |
-  | Config6 | int  | 第六轴角度标识<br />  -1,-2...：第6轴角度为[0,-90]为-1；[-90,-180]为-2；以此类推<br />1,2...：第6轴角度为[0,90]为1；[90,180]为2；以此类推 |
+  | Parameter | Type | Description                                       |
+  | --------- | ---- | ------------------------------------------------- |
+  | LorR      | int  | Arm direction: forward/backward (1/-1)            |
+  | UorD      | int  | Arm direction: up the elbow/down the elbow (1/-1) |
+  | ForN      | int  | Whether the wrist is reversed (1/-1)              |
+  | Config6   | int  | Sixth axis Angle sign                             |
 
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   SetArmOrientation(1,1,-1,1)
-
+  ```
 ## 3.24 PowerOn
 
-- 功能：机器人上电。 
-- 格式：PowerOn()
-- 参数数量：0
-- 支持端口：29999
-- **注意：机器人上电完成，需要等待大概10秒钟的时间进行使能操作；**
+- Function: PowerOn()
+- Description: Power on the robot 
+- Parameters: None
+- Supporting port: 29999
+
+  **Note: Once the robot is powered on, you can enable the robot after about 10 seconds.
 
 
-- 示例：
-
+- Example
+    ```
   PowerOn()
-
+  ```
 ## 3.25 RunScript
 
-- 功能：运行脚本。 
+- Function: RunScript(projectName)
 
-- 格式：RunScript(projectName)
+- Description: run the script 
 
-- 参数数量：1
+- Parameters: 
 
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名         | 类型     | 含义   |
-  | ----------- | ------ | ---- |
-  | projectName | string | 脚本名称 |
+  | Parameter   | Type   | Description |
+  | ----------- | ------ | ----------- |
+  | projectName | string | script name |
 
 
-- 示例：
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
   RunScript(demo)
-
+  ```
 ## 3.26 StopScript
 
-- 功能：停止脚本。 
+- Function: StopScript()
 
-- 格式：StopScript()
+- Description: stop the script
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 示例：
-
+- Example
+    ```
   StopScript()
-
+  ```
 ## 3.27 PauseScript
 
-- 功能：暂停脚本。 
+- Function: PauseScript()
 
-- 格式：PauseScript()
+- Description: pause the script
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 示例：
-
+- Example
+    ```
   PauseScript()
-
+  ```
 ## 3.28 ContinueScript
 
-- 功能：继续脚本。 
+- Function: ContinueScript()
 
-- 格式：ContinueScript()
+- Description: continue the script
 
-- 参数数量：0
+- Parameters: None
 
-- 支持端口：29999
+- Supporting port: 29999
 
-
-
-- 示例：
-
+- Example
+    ```
   ContinueScript()
-
+  ```
 ## 3.29 GetHoldRegs
 
-- 功能：读保持寄存器。 
+- Function: GetHoldRegs(id,*addr*, *count*,type)
 
-- 格式：GetHoldRegs(id,*addr*, *count*,type)
+- Description: read the holding register value
 
-- 参数数量：4
+- Parameters: 
 
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名   | 类型     | 含义                                       |
-  | ----- | ------ | ---------------------------------------- |
-  | id    | int    | id,从站设备号，最多支持5个设备,取值范围(0~4),当访问控制器内部从站时则要设置为0； |
-  | addr  | int    | 保持寄存器的起始地址。取值范围：3095 ~ 4095              |
-  | count | int    | 读取指定数量type类型的数据。取值范围：1 ~16               |
-  | type  | string | 数据类型：<br /> 如果为空，默认读取16位无符号整数（2个字节，占用1个寄存器）<br /> “U16”：读取16位无符号整数（2个字节，占用1个寄存器）<br /> “U32”：读取32位无符号整数（4个字节，占用2个寄存器）<br /> “F32”：读取32位单精度浮点数（4个字节，占用2个寄存器）<br /> “F64”：读取64位双精度浮点数（8个字节，占用4个寄存器） |
+  | Parameter | Type   | Description                                                  |
+  | --------- | ------ | ------------------------------------------------------------ |
+  | id        | int    | device ID of slave station, supporting at most five devices, range: 0~4. You should set it to 0 when accessing the internal slave of controller |
+  | addr      | int    | starting address of the holding registers. range: 3095~4095  |
+  | count     | int    | read the specified amount of data of type, range: 1~16       |
+  | type      | string | data type: <br />If it is empty, read 16-bit unsigned integer ( two bytes, occupy one register)<br /> “U16”：read 16-bit unsigned integer ( two bytes, occupy one register)<br /> “U32”：read 32-bit unsigned integer (four bytes, occupy two registers)<br /> “F32”：read 32-bit single-precision floating-point number (four bytes, occupy two registers)<br /> “F64”：read 64-bit double-precision floating-point number (eight bytes, occupy four registers) |
 
 
-- 示例：从地址3095开始读取一个16位无符号整数
-- data= GetHoldRegs(0,3095,1)
-
+- Supporting port: 29999
+  
+- Example
+  
+  ```
+  data= GetHoldRegs(0,3095,1)
+  ```
+  Read a 16-bit unsigned integer starting at address 3095.
+  
 ## 3.30 SetHoldRegs
 
-- 功能：写保存寄存器。 
-
-- 格式：SetHoldRegs(id,*addr*, *count*,*table*,type)
-
-- 参数数量：5
-
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名   | 类型     | 含义                                       |
-  | ----- | ------ | ---------------------------------------- |
-  | id    | int    | id,从站设备号，最多支持5个设备,取值范围(0~4),当访问控制器内部从站时则要设置为0； |
-  | addr  | int    | 保持寄存器的起始地址。取值范围：3095 ~ 4095              |
-  | count | int    | 写入指定数量type类型的数据。取值范围：1 ~16               |
-  | table | int    | 保持寄存器地址的值                                |
-  | type  | string | 数据类型     <br /> 如果为空，默认读取16位无符号整数（2个字节，占用1个寄存器） <br /> “U16”：读取16位无符号整数（2个字节，占用1个寄存器）  <br />“U32”：读取32位无符号整数（4个字节，占用2个寄存器）   <br />“F32”：读取32位单精度浮点数（4个字节，占用2个寄存器）    <br /> “F64”：读取64位双精度浮点数（8个字节，占用4个寄存器） |
-
-
-- 示例：从地址3095开始，写入两个16位无符号整数值6000，300
-- SetHoldRegs(0,3095,2,{6000,300}, “U16”)
-
-
-## 3.31 SetSafeSkin
-
-- 功能：设置安全皮肤开关状态。 
-
-- 格式：SetSafeSkin(status)
-
-- 参数数量：1
-
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名    | 类型   | 含义                                |
-  | ------ | ---- | --------------------------------- |
-  | status | int  | status：电子皮肤开关状态，0：关闭电子皮肤；1：开启电子皮肤 |
-
-
-- 示例：开启电子皮肤功能
-
-  SetSafeSkin (1)
-
-## 3.32 SetObstacleAvoid
-
-- 功能：设置安全皮肤避障模式开关状态。 
-
-- 格式：SetObstacleAvoid(status)
-
-- 参数数量：1
-
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名    | 类型   | 含义                                       |
-  | ------ | ---- | ---------------------------------------- |
-  | status | int  | status：安全皮肤避障模式开关状态，0：关闭安全皮肤避障模式；1：开启安全皮肤避障功能 |
-
-
-- 示例：开启安全皮肤避障功能
-
-  SetObstacleAvoid(1)
-
-## 3.33 GetTraceStartPose
-
-- 功能：获取轨迹拟合中首个点位。 
-
-- 格式：GetTraceStartPose(traceName)
-
-- 参数数量：1
-
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名       | 类型     | 含义                                       |
-  | --------- | ------ | ---------------------------------------- |
-  | traceName | string | 轨迹文件名（含后缀）<br /> 轨迹路径存放在/dobot/userdata/project/process/trajectory/ |
-
-
-- 返回：
-
-  点位坐标值
-
-- 示例：
-
-  local recv_string=”demo.json”
-
-  local P1 = GetTraceStartPose(recv_string)
-
-## 3.34 GetPathStartPose
-
-- 功能：获取轨迹复现中首个点位。 
-
-- 格式：GetPathStartPose(traceName)
-
-- 参数数量：1
-
-- 支持端口：29999
-
-- 参数详解：
-
-  | 参数名       | 类型     | 含义                                       |
-  | --------- | ------ | ---------------------------------------- |
-  | traceName | string | 轨迹文件名（含后缀）<br /> 轨迹路径存放在/dobot/userdata/project/process/trajectory/ |
-
-
-- 返回：
-
-  关节点位坐标值
-
-- 示例：
-
-  local recv_string=”demo.json”
-
-  local P1 = GetPathStartPose(recv_string)
-
-## 3.35 PositiveSolution
-
-- 功能：正解。（给定机器人各关节的角度，计算出机器人末端的空间位置）
-
-- 格式：PositiveSolution(J1,J2,J3,J4,J5,J6)
-
-- 参数数量：6
-
-- 支持端口：29999
-
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义          |
-  | ---- | ------ | ----------- |
-  | J1   | double | J1 轴位置，单位：度 |
-  | J2   | double | J2 轴位置，单位：度 |
-  | J3   | double | J3 轴位置，单位：度 |
-  | J4   | double | J4 轴位置，单位：度 |
-  | J5   | double | J5 轴位置，单位：度 |
-  | J6   | double | J6 轴位置，单位：度 |
-
-- 注意，需要已知：
-
-  - 设置好已标定的用户坐标系User
-  - 设置好已标定的刀具坐标系Tool
-  - 机器人的臂方向SetArmOrientation
-
-- 示例：下发关节角度返回当前的机器人末端的空间位置
-
-  local P1 = PositiveSolution(0,0,-90,0,90,0)
-
-## 3.36 InverseSolution
-
-- 功能：逆解。（已知机器人末端的位置和姿态，计算机器人各关节的角度值）
-
-- 格式：InverseSolution(X,Y,Z,A,B,C)
-
-- 参数数量：6
-
-- 支持端口：29999
-
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义          |
-  | ---- | ------ | ----------- |
-  | X    | double | X 轴位置，单位：毫米 |
-  | Y    | double | Y 轴位置，单位：毫米 |
-  | Z    | double | Z 轴位置，单位：毫米 |
-  | A    | double | A 轴位置，单位：度  |
-  | B    | double | B 轴位置，单位：度  |
-  | C    | double | C 轴位置，单位：度  |
-
-- 注意，需要已知：
-
-  - 设置好已标定的用户坐标系User
-  - 设置好已标定的刀具坐标系Tool
-  - 机器人的臂方向SetArmOrientation
-
-- 示例：下发关节角度返回当前的机器人末端的空间位置
-
-  local P1 = PositiveSolution(0,-247,1050,-90,0,180)
-
-
-
-
-# 4.通信协议----实时反馈端口
-
-​	30003端口即实时反馈端口除了用于发送约定的运动相关协议外，还有其他功能，客户端每20ms能收到一次机器人如下表所示的信息。通过实时反馈端口每次收到的数据包有1440个字节，这些字节以标准的格式排列。下表是字节排列的顺序表。
-
-|        意义/Meaning         |   数据类型/Type    | 值的数目/Number of values | 字节大小/Size in bytes | 字节位置值/Byte position value |                 描述/Notes                 |
-| :-----------------------: | :------------: | :-------------------: | :----------------: | :-----------------------: | :--------------------------------------: |
-|       Message Size        | unsigned short |           1           |         2          |        0000 ~ 0001        |  消息字节总长度/Total message length in bytes   |
-|                           | unsigned short |           3           |         6          |        0002 ~ 0007        |                   保留位                    |
-|    Digital input bits     |     double     |           1           |         8          |        0008 ~ 0015        | 数字输入/Current state of the digital inputs. |
-|      Digital outputs      |     double     |           1           |         8          |        0016 ~ 0023        |                   数字输出                   |
-|        Robot Mode         |     double     |           1           |         8          |        0024 ~ 0031        |             机器人模式/Robot mode             |
-|     Controller Timer      |     double     |           1           |         8          |        0032 ~ 0039        | 程序扫描时间/Controller realtime thread execution time |
-|           Time            |     double     |           1           |         8          |        0040 ~ 0047        | 控制器通电时间/Time elapsed since the controller was started |
-|        test_value         |     double     |           1           |         8          |        0048 ~ 0055        |     内存结构测试标准值  0x0123 4567 89AB CDEF     |
-|        Safety Mode        |     double     |           1           |         8          |        0056 ~ 0063        |             安全模式/Safety mode             |
-|       Speed scaling       |     double     |           1           |         8          |        0064 ~ 0071        | 速度比例/Speed scaling of the trajectory limiter |
-|   Linear momentum norm    |     double     |           1           |         8          |        0072 ~ 0079        | 机器人当前动量/Norm of Cartesian linear momentum |
-|          V main           |     double     |           1           |         8          |        0080 ~ 0087        |     控制板电压/Masterboard: Main voltage      |
-|          V robot          |     double     |           1           |         8          |        0088 ~ 0095        |  机器人电压/Masterboard: Robot voltage (48V)  |
-|          I robot          |     double     |           1           |         8          |        0096 ~ 0103        |     机器人电流/Masterboard: Robot current     |
-|       Program state       |     double     |           1           |         8          |        0104 ~ 0111        |            程序状态/Program state            |
-|       Safety Status       |     double     |           1           |         8          |        0112 ~ 0119        |            安全状态/Safety status            |
-| Tool Accelerometer values |     double     |           3           |         24         |        0120 ~ 0143        | TCP加速度/Tool x,y and z accelerometer values |
-|      Elbow position       |     double     |           3           |         24         |        0144 ~ 0167        |            肘位置/Elbow position            |
-|      Elbow velocity       |     double     |           3           |         24         |        0168 ~ 0191        |            肘速度/Elbow velocity            |
-|         q target          |     double     |           6           |         48         |        0192 ~ 0239        |      目标关节位置/Target joint positions       |
-|         qd target         |     double     |           6           |         48         |        0240 ~ 0287        |      目标关节速度/Target joint velocities      |
-|        qdd target         |     double     |           6           |         48         |        0288 ~ 0335        |    目标关节加速度/Target joint accelerations    |
-|         I target          |     double     |           6           |         48         |        0336 ~ 0383        |       目标关节电流/Target joint currents       |
-|         M target          |     double     |           6           |         48         |        0384 ~ 0431        |  目标关节扭矩/Target joint moments (torques)   |
-|         q actual          |     double     |           6           |         48         |        0432 ~ 0479        |      实际关节位置/Actual joint positions       |
-|         qd actual         |     double     |           6           |         48         |        0480 ~ 0527        |      实际关节速度/Actual joint velocities      |
-|         I actual          |     double     |           6           |         48         |        0528 ~ 0575        |       实际关节电流/Actual joint currents       |
-|         I control         |     double     |           6           |         48         |        0576 ~ 0623        |   关节控制电流/Joint control currents(暂时0代替)   |
-|    Tool vector actual     |     double     |           6           |         48         |        0624 ~ 0671        | TCP笛卡尔实际坐标值/Actual Cartesian coordinates of the tool: (x,y,z,rx,ry,rz), where rx, ry and rz is a rotation vector representation of the tool orientation |
-|     TCP speed actual      |     double     |           6           |         48         |        0672 ~ 0719        | TCP笛卡尔实际速度值/Actual speed of the tool given in Cartesian coordinates |
-|         TCP force         |     double     |           6           |         48         |        0720 ~ 0767        |   TCP力值/Generalised forces in the TCP    |
-|    Tool vector target     |     double     |           6           |         48         |        0768 ~ 0815        | TCP笛卡尔目标坐标值/Target Cartesian coordinates of the tool: (x,y,z,rx,ry,rz), where rx, ry and rz is a rotation vector representation of the tool orientation |
-|     TCP speed target      |     double     |           6           |         48         |        0816 ~ 0863        | TCP笛卡尔目标速度值/Target speed of the tool given in Cartesian coordinates |
-|    Motor temperatures     |     double     |           6           |         48         |        0864 ~ 0911        | 关节温度/Temperature of each joint in degrees celsius |
-|        Joint Modes        |     double     |           6           |         48         |        0912 ~ 0959        |        关节控制模式/Joint control modes        |
-|         V actual          |     double     |           6           |         48         |        960  ~ 1007        |        关节电压/Actual joint voltages        |
-|                           |     double     |          54           |        432         |        1008 ~ 1439        |                   保留位                    |
-|           TOTAL           |                |          183          |        1440        |                           |     183values in a 1440byte package      |
-
-其中Robot Mode返回机器人模式：                                                          
-
-| 模式   | 描述                           | 备注     |
-| ---- | ---------------------------- | ------ |
-| -1   | ROBOT_MODE_NO_CONTROLLER     | 没有控制器  |
-| 0    | ROBOT_MODE_DISCONNECTED      | 没有连接   |
-| 1    | ROBOT_MODE_CONFIRM_SAFETY    | 配置安全参数 |
-| 2    | ROBOT_MODE_BOOTING           | 启动     |
-| 3    | ROBOT_MODE_POWER_OFF         | 下电     |
-| 4    | ROBOT_MODE_POWER_ON          | 上电     |
-| 5    | ROBOT_MODE_IDLE              | 空闲     |
-| 6    | ROBOT_MODE_BACKDRIVE         | 拖拽     |
-| 7    | ROBOT_MODE_RUNNING           | 运行     |
-| 8    | ROBOT_MODE_UPDATING_FIRMWARE | 更新固件   |
-| 9    | ROBOT_MODE_ERROR             | 报警     |
-
-- 说明：
-  - [ ] 本体下电，状态为3；
-  - [ ] 本体有电，但没有使能，状态为4；
-  - [ ] 使能成功后，则状态为5 ；
-  - [ ] 机器人进入拖拽模式(使能状态)，状态为6；
-  - [ ] 机器人发生运动，状态为7；
-  - [ ] 优先级：上电<空闲<拖拽=运行<下电<报警
-  - [ ] 其中报警优先级最高，其他状态同时存在时，若有报警，先将状态置9；
-
-如下表所示为实时反馈端口支持的运动命令协议，实时反馈端口仅接收命令不做反馈；
-
-| 指令         | 描述                          |
-| ---------- | --------------------------- |
-| MovJ       | 点到点运动，目标点位为笛卡尔点位。           |
-| MovL       | 直线运动，目标点位为笛卡尔点位             |
-| JointMovJ  | 点到点运动，目标点位为关节点位             |
-| Jump       | 门型运动，仅支持笛卡尔点位               |
-| RelMovJ    | 以点到点方式运动至笛卡尔偏移位置            |
-| RelMovL    | 以直线运动至笛卡尔偏移位置               |
-| MovLIO     | 直线运动过程中并行设置数字输出端口的状态，可设置多组  |
-| MovJIO     | 点到点运动过程中并行设置数字输出端口的状态，可设置多组 |
-| Arc        | 圆弧运动。需结合其他运动指令完成圆弧运动。       |
-| Circle     | 整圆运动，需结合其他运动指令完成整圆运动        |
-| ServoJ     | 基于关节空间的动态跟随命令               |
-| ServoP     | 基于笛卡尔空间的动态跟随命令              |
-| Sync       | 阻塞程序执行队列指令，待所有队列指令执行完才返回    |
-| StartTrace | 轨迹拟合                        |
-| StartPath  | 轨迹复现                        |
+- Function: SetHoldRegs(id,*addr*, *count*,*table*,type)
+
+- Description: write in the holding register
+
+- Parameters: 
+
+  | Parameter | Type   | Description                                                  |
+  | --------- | ------ | ------------------------------------------------------------ |
+  | id        | int    | device ID of slave station, supporting at most five devices, range: 0~4. You should set it to 0 when accessing the internal slave of controller |
+  | addr      | int    | starting address of the holding registers. range: 3095~4095  |
+  | count     | int    | write the specified amount of data of type, range: 1~16      |
+  | table     | int    | holding register value                                       |
+  | type      | string | data type: <br />If it is empty, read 16-bit unsigned integer ( two bytes, occupy one register)<br /> “U16”：read 16-bit unsigned integer ( two bytes, occupy one register)<br /> “U32”：read 32-bit unsigned integer (four bytes, occupy two registers)<br /> “F32”：read 32-bit single-precision floating-point number (four bytes, occupy two registers)<br /> “F64”：read 64-bit double-precision floating-point number (eight bytes, occupy four registers) |
+
+
+- Supporting port: 29999
+  
+- Example
+  
+  ```
+  SetHoldRegs(0,3095,2,{6000,300}, “U16”)
+  ```
+  Write two 16-bit unsigned integers: 6000 and 300, starting at address 3095.
+
+
+
+
+# 4. Communication Protocol—Real- time Feedback Port
+
+30003 port (real-time feedback port) is not only used to send the agreed motion-related protocols, but has other functions. The client can receive the robot information every 20ms, as shown in the following table. Each packet received through the real-time feedback port has 1440 bytes, which are arranged in a standard format. The following table shows the order of the bytes.
+
+| Meaning                   | Type           | Number of values | Size in bytes | Byte position value | Notes                                                        |
+| :------------------------ | :------------- | :--------------- | :------------ | :------------------ | :----------------------------------------------------------- |
+| Message Size              | unsigned short | 1                | 2             | 0000 ~ 0001         | Total message length in bytes                                |
+|                           | unsigned short | 3                | 6             | 0002 ~ 0007         | Reserved bits                                                |
+| Digital input bits        | double         | 1                | 8             | 0008 ~ 0015         | Current state of the digital inputs                          |
+| Digital outputs           | double         | 1                | 8             | 0016 ~ 0023         | digital output                                               |
+| Robot Mode                | double         | 1                | 8             | 0024 ~ 0031         | Robot mode                                                   |
+| Controller Timer          | double         | 1                | 8             | 0032 ~ 0039         | Controller realtime thread execution time                    |
+| Time                      | double         | 1                | 8             | 0040 ~ 0047         | Time elapsed since the controller was started                |
+| test_value                | double         | 1                | 8             | 0048 ~ 0055         | Standard values for memory structure test: 0x0123 4567 89AB CDEF |
+| Safety Mode               | double         | 1                | 8             | 0056 ~ 0063         | Safety mode                                                  |
+| Speed scaling             | double         | 1                | 8             | 0064 ~ 0071         | Speed scaling of the trajectory limiter                      |
+| Linear momentum norm      | double         | 1                | 8             | 0072 ~ 0079         | Norm of Cartesian linear momentum                            |
+| V main                    | double         | 1                | 8             | 0080 ~ 0087         | Masterboard: Main voltage                                    |
+| V robot                   | double         | 1                | 8             | 0088 ~ 0095         | Masterboard: Robot voltage (48V)                             |
+| I robot                   | double         | 1                | 8             | 0096 ~ 0103         | Masterboard: Robot current                                   |
+| Program state             | double         | 1                | 8             | 0104 ~ 0111         | Program state                                                |
+| Safety Status             | double         | 1                | 8             | 0112 ~ 0119         | Safety status                                                |
+| Tool Accelerometer values | double         | 3                | 24            | 0120 ~ 0143         | Tool x,y and z accelerometer values                          |
+| Elbow position            | double         | 3                | 24            | 0144 ~ 0167         | Elbow position                                               |
+| Elbow velocity            | double         | 3                | 24            | 0168 ~ 0191         | Elbow velocity                                               |
+| q target                  | double         | 6                | 48            | 0192 ~ 0239         | Target joint positions                                       |
+| qd target                 | double         | 6                | 48            | 0240 ~ 0287         | Target joint velocities                                      |
+| qdd target                | double         | 6                | 48            | 0288 ~ 0335         | Target joint accelerations                                   |
+| I target                  | double         | 6                | 48            | 0336 ~ 0383         | Target joint currents                                        |
+| M target                  | double         | 6                | 48            | 0384 ~ 0431         | Target joint moments (torques)                               |
+| q actual                  | double         | 6                | 48            | 0432 ~ 0479         | Actual joint positions                                       |
+| qd actual                 | double         | 6                | 48            | 0480 ~ 0527         | Actual joint velocities                                      |
+| I actual                  | double         | 6                | 48            | 0528 ~ 0575         | Actual joint currents                                        |
+| I control                 | double         | 6                | 48            | 0576 ~ 0623         | Joint control currents(temporally replaced by 0)             |
+| Tool vector actual        | double         | 6                | 48            | 0624 ~ 0671         | Actual Cartesian coordinates of the tool: (x,y,z,rx,ry,rz), where rx, ry and rz is a rotation vector representation of the tool orientation |
+| TCP speed actual          | double         | 6                | 48            | 0672 ~ 0719         | Actual speed of the tool given in Cartesian coordinates      |
+| TCP force                 | double         | 6                | 48            | 0720 ~ 0767         | Generalised forces in the TCP                                |
+| Tool vector target        | double         | 6                | 48            | 0768 ~ 0815         | Target Cartesian coordinates of the tool: (x,y,z,rx,ry,rz), where rx, ry and rz is a rotation vector representation of the tool orientation |
+| TCP speed target          | double         | 6                | 48            | 0816 ~ 0863         | Target speed of the tool given in Cartesian coordinates      |
+| Motor temperatures        | double         | 6                | 48            | 0864 ~ 0911         | Temperature of each joint in degrees celsius                 |
+| Joint Modes               | double         | 6                | 48            | 0912 ~ 0959         | Joint control modes                                          |
+| V actual                  | double         | 6                | 48            | 960  ~ 1007         | Actual joint voltages                                        |
+|                           | double         | 54               | 432           | 1008 ~ 1439         | Reserved bits                                                |
+| TOTAL                     |                | 183              | 1440          |                     | 183 values in a 1440-byte package                            |
+
+Robot Mode returns the mode of robo as follows:                                                    
+
+| Mode | Description                  | Note                       |
+| ---- | ---------------------------- | -------------------------- |
+| -1   | ROBOT_MODE_NO_CONTROLLER     | No controller              |
+| 0    | ROBOT_MODE_DISCONNECTED      | Disconnect                 |
+| 1    | ROBOT_MODE_CONFIRM_SAFETY    | Configure safety parameter |
+| 2    | ROBOT_MODE_BOOTING           | Start                      |
+| 3    | ROBOT_MODE_POWER_OFF         | Power off                  |
+| 4    | ROBOT_MODE_POWER_ON          | Power on                   |
+| 5    | ROBOT_MODE_IDLE              | Idle                       |
+| 6    | ROBOT_MODE_BACKDRIVE         | Drag                       |
+| 7    | ROBOT_MODE_RUNNING           | Run                        |
+| 8    | ROBOT_MODE_UPDATING_FIRMWARE | Update firmware            |
+| 9    | ROBOT_MODE_ERROR             | Alarm                      |
+
+- Description：
+  - [ ] If the robot is powered off, the mode is 3.
+
+  - [ ] If the robot is powered on but not enabled, the mode is 4;
+
+  - [ ]  If the robot is enabled successfully, the mode is 5.
+
+  - [ ] If the robot enters drag mode (enabled state), the mode is 6;
+
+  - [ ]  If the robot moves, the mode is 7;
+
+  - [ ] Priority: Power on < Idle < Drag = Run < Power off < Alarm
+
+  - [ ] Alarm is the top priority. When other modes exist simultaneously, if there is an alarm, the mode is set to 9 first;
+
+The following table shows the motion command protocols supported by the real-time feedback port. The real-time feedback port only receives commands but does not give feedback.
+
+| Command   | Description                                                  |
+| --------- | ------------------------------------------------------------ |
+| MovJ      | point to point movement, the target point is Cartesian point |
+| MovL      | linear movement, the target point is Cartesian point         |
+| JointMovJ | point to point movement, the target point is joint point     |
+| Jump      | Jump movement, only supports Cartesian points                |
+| RelMovJ   | move to the Cartesian offset position in a point-to-point mode |
+| RelMovL   | move to the Cartesian offset position in a straight line     |
+| MovLIO    | set the status of digital output port in straight line movement (can set several groups) |
+| MovJIO    | set the status of digital output port in point-to-point movement, and the target point is Cartesian point |
+| Arc       | arc movement, needs to combine with other motion commands    |
+| Circle    | circular movement, needs to combine with other motion commands |
+| ServoJ    | dynamic following command based on joint space               |
+| ServoP    | dynamic following command based on Cartesian space           |
 
 ## 4.1 MovJ
 
-- 功能：点到点运动，目标点位为笛卡尔点位。
+- Function: MovJ(X,Y,Z,A,B,C)
 
-- 格式：MovJ(X,Y,Z,A,B,C)
+- Description: point to point movement, the target point is Cartesian point
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                  |
+  | --------- | ------ | ---------------------------- |
+  | X         | double | X-axis coordinates, unit: mm |
+  | Y         | double | Y-axis coordinates, unit: mm |
+  | Z         | double | Z-axis coordinates, unit: mm |
+  | A         | double | A-axis coordinates, unit: °  |
+  | B         | double | B-axis coordinates, unit: °  |
+  | C         | double | C-axis coordinates, unit: °  |
 
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义          |
-  | ---- | ------ | ----------- |
-  | X    | double | X 轴位置，单位：毫米 |
-  | Y    | double | Y 轴位置，单位：毫米 |
-  | Z    | double | Z 轴位置，单位：毫米 |
-  | A    | double | A 轴位置，单位：度  |
-  | B    | double | B 轴位置，单位：度  |
-  | C    | double | C 轴位置，单位：度  |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   MovJ(-500,100,200,150,0,90)
-
+  ```
 
 
 ## 4.2 MovL
 
-- 功能：直线运动，目标点位为笛卡尔点位。
+- Function: MovL(X,Y,Z,A,B,C)
 
-- 格式：MovL(X,Y,Z,A,B,C)
+- Description: linear movement, the target point is Cartesian point
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                  |
+  | --------- | ------ | ---------------------------- |
+  | X         | double | X-axis coordinates, unit: mm |
+  | Y         | double | Y-axis coordinates, unit: mm |
+  | Z         | double | Z-axis coordinates, unit: mm |
+  | A         | double | A-axis coordinates, unit: °  |
+  | B         | double | B-axis coordinates, unit: °  |
+  | C         | double | C-axis coordinates, unit: °  |
 
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义          |
-  | ---- | ------ | ----------- |
-  | X    | double | X 轴位置，单位：毫米 |
-  | Y    | double | Y 轴位置，单位：毫米 |
-  | Z    | double | Z 轴位置，单位：毫米 |
-  | A    | double | A 轴位置，单位：度  |
-  | B    | double | B 轴位置，单位：度  |
-  | C    | double | C 轴位置，单位：度  |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   MovL(-500,100,200,150,0,90)
-
+  ```
 ## 4.3 JointMovJ
 
-- 功能：点到点运动，目标点位为关节点位。
+- Function: JointMovJ(J1,J2,J3,J4,J5,J6)
 
-- 格式：JointMovJ(J1,J2,J3,J4,J5,J6)
+- Description: point to point movement, the target point is joint point
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description             |
+  | --------- | ------ | ----------------------- |
+  | J1        | double | J1 coordinates, unit: ° |
+  | J2        | double | J2 coordinates, unit: ° |
+  | J3        | double | J3 coordinates, unit: ° |
+  | J4        | double | J4 coordinates, unit: ° |
+  | J5        | double | J5 coordinates, unit: ° |
+  | J6        | double | J6 coordinates, unit: ° |
 
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义          |
-  | ---- | ------ | ----------- |
-  | J1   | double | J1 轴位置，单位：度 |
-  | J2   | double | J2 轴位置，单位：度 |
-  | J3   | double | J3 轴位置，单位：度 |
-  | J4   | double | J4 轴位置，单位：度 |
-  | J5   | double | J5 轴位置，单位：度 |
-  | J6   | double | J6 轴位置，单位：度 |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   JointMovJ(0,0,-90,0,90,0)
-
+  ```
 ## 4.4 Jump
 
-待定
+To be determined
 
 ## 4.5 RelMovJ
 
-- 功能：以点到点方式运动至笛卡尔偏移位置。
+- Function: RelMovJ(offset1,offset2,offset3,offset4,offset5,offset6)
 
-- 格式：RelMovJ(offset1,offset2,offset3,offset4,offset5,offset6)
+- Description: move to the Cartesian offset position in a point-to-point mode
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description             |
+  | --------- | ------ | ----------------------- |
+  | offset1   | double | J1-axis offset, unit: ° |
+  | offset2   | double | J2-axis offset, unit: ° |
+  | offset3   | double | J3-axis offset, unit: ° |
+  | offset4   | double | J4-axis offset, unit: ° |
+  | offset5   | double | J5-axis offset, unit: ° |
+  | offset6   | double | J6-axis offset, unit: ° |
 
-- 参数详解：6
-
-  | 参数名     | 类型     | 含义              |
-  | ------- | ------ | --------------- |
-  | offset1 | double | 关节J1轴方向偏移，单位：度  |
-  | offset2 | double | 关节J2轴方向偏移，单位：度  |
-  | offset3 | double | 关节J3轴方向偏移，单位：度  |
-  | offset4 | double | 关节J4轴方向偏移，单位：度  |
-  | offset5 | double | 关节J5轴方向偏移，单位：度  |
-  | offset6 | double | 关节J6轴轴方向偏移，单位：度 |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   RelMovJ(10,10,10,10,10,10)
-
+  ```
 ## 4.6 RelMovL
 
-- 功能：以直线运动至笛卡尔偏移位置。
+- Function: RelMovL(offsetX,offsetY,offsetZ)
 
-- 格式：RelMovL(offsetX,offsetY,offsetZ)
+- Description: move to the Cartesian offset position in a straight line
 
-- 参数数量：3
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                                                |
+  | --------- | ------ | ---------------------------------------------------------- |
+  | offsetX   | double | X-axis offset in the Cartesian coordinate system; unit: mm |
+  | offsetY   | double | Y-axis offset in the Cartesian coordinate system; unit: mm |
+  | offsetZ   | double | Z-axis offset in the Cartesian coordinate system; unit: mm |
 
-- 参数详解：3
-
-  | 参数名     | 类型     | 含义           |
-  | ------- | ------ | ------------ |
-  | offsetX | double | X轴方向偏移，单位：mm |
-  | offsetY | double | Y轴方向偏移，单位：mm |
-  | offsetZ | double | Z轴方向偏移，单位：mm |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   RelMovL(10,10,10)
-
+  ```
 ## 4.7 MovLIO
 
-- 功能：在直线运动时并行设置数字输出端口状态，目标点位为笛卡尔点位。
+- Function: MovLIO(X,Y,Z,A,B,C,{Mode,Distance,Index,Status},...,{Mode,Distance,Index,Status})
 
-- 格式：MovLIO(X,Y,Z,A,B,C,{Mode,Distance,Index,Status},...,{Mode,Distance,Index,Status})
+- Description: set the status of digital output port in straight line movement, and the target point is Cartesian point
 
-- 参数数量：10
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                                                  |
+  | --------- | ------ | ------------------------------------------------------------ |
+  | X         | double | X-axis coordinates, unit: mm                                 |
+  | Y         | double | Y-axis coordinates, unit: mm                                 |
+  | Z         | double | Z-axis coordinates, unit: mm                                 |
+  | A         | double | A-axis coordinates, unit: °                                  |
+  | B         | double | B-axis coordinates, unit: °                                  |
+  | C         | double | C-axis coordinates, unit: °                                  |
+  | Mode      | int    | mode of Distance. 0: distance percentage; 1: distance away from the starting point or target point |
+  | Distance  | int    | move specified distance. If Mode is 0, Distance refers to the distance percentage between the starting point and target point; range: 0~100. If Distance value is positive, it refers to the distance away from the starting point; If Distance value is negative, it refers to the distance away from the target point |
+  | Index     | int    | digital output index, range: 1~24                            |
+  | Status    | int    | digital output status, range: 0 or 1                         |
 
-- 参数详解：10
-
-  | 参数名      | 类型     | 含义                                       |
-  | -------- | ------ | ---------------------------------------- |
-  | X        | double | X 轴位置，单位：毫米                              |
-  | Y        | double | Y 轴位置，单位：毫米                              |
-  | Z        | double | Z 轴位置，单位：毫米                              |
-  | A        | double | A 轴位置，单位：度                               |
-  | B        | double | B 轴位置，单位：度                               |
-  | C        | double | C 轴位置，单位：度                               |
-  | Mode     | int    | 设置Distance模式，0：Distance为距离百分比；1：Distance为离起始点或目标点的距离 |
-  | Distance | int    | 运行指定的距离:  若Mode为0，则Distance表示起始点与目标点之间距离的百分比，取值范围：0~100; 若Distance取值为正，则表示离起始点的距离; 若Distance取值为负，则表示离目标点的距离 |
-  | Index    | int    | 数字输出索引，取值范围：1~24                         |
-  | Status   | int    | 数字输出状态，取值范围：0或1                          |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   MovLIO(-500,100,200,150,0,90,{0,50,1,0})
-
+  ```
 ## 4.8 MovJIO
 
-- 功能：点到点运动时并行设置数字输出端口状态，目标点位为笛卡尔点位。
+- Function: MovJIO(X,Y,Z,A,B,C,{Mode,Distance,Index,Status},...,{Mode,Distance,Index,Status})
 
-- 格式：MovJIO(X,Y,Z,A,B,C,{Mode,Distance,Index,Status},...,{Mode,Distance,Index,Status})
+- Description: set the status of digital output port in point-to-point movement, and the target point is Cartesian point
 
-- 参数数量：不固定
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                                                  |
+  | --------- | ------ | ------------------------------------------------------------ |
+  | X         | double | X-axis coordinates, unit: mm                                 |
+  | Y         | double | Y-axis coordinates, unit: mm                                 |
+  | Z         | double | Z-axis coordinates, unit: mm                                 |
+  | A         | double | A-axis coordinates, unit: °                                  |
+  | B         | double | B-axis coordinates, unit: °                                  |
+  | C         | double | C-axis coordinates, unit: °                                  |
+  | Mode      | int    | mode of Distance. 0: distance percentage; 1: distance away from the starting point or target point |
+  | Distance  | int    | move specified distance. If Mode is 0, Distance refers to the distance percentage between the starting point and target point; range: 0~100. If Distance value is positive, it refers to the distance away from the starting point; If Distance value is negative, it refers to the distance away from the target point |
+  | Index     | int    | digital output index, range: 1~24                            |
+  | Status    | int    | digital output status, range: 0 or 1                         |
 
-- 参数详解：10
-
-  | 参数名      | 类型     | 含义                                       |
-  | -------- | ------ | ---------------------------------------- |
-  | X        | double | X 轴位置，单位：毫米                              |
-  | Y        | double | Y 轴位置，单位：毫米                              |
-  | Z        | double | Z 轴位置，单位：毫米                              |
-  | A        | double | A 轴位置，单位：度                               |
-  | B        | double | B 轴位置，单位：度                               |
-  | C        | double | C 轴位置，单位：度                               |
-  | Mode     | int    | 设置Distance模式，0：Distance为距离百分比；1：Distance为离起始点或目标点的距离 |
-  | Distance | int    | 运行指定的距离:  若Mode为0，则Distance表示起始点与目标点之间距离的百分比，取值范围：0~100; 若Distance取值为正，则表示离起始点的距离; 若Distance取值为负，则表示离目标点的距离 |
-  | Index    | int    | 数字输出索引，取值范围：1~24                         |
-  | Status   | int    | 数字输出状态，取值范围：0或1                          |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   MovJIO(-500,100,200,150,0,90,{0,50,1,0})
-
+  ```
 ## 4.9 Arc
 
-- 功能：：从当前位置以圆弧插补方式移动至笛卡尔坐标系下的目标位置。
+- Function: Arc(X1,Y1,Z1,A1,B1,C1,X2,Y2,Z2,A2,B2,C2)
 
-  ​		该指令需结合其他运动指令确定圆弧起始点。
+- Description: move from the current position to a target position in an arc interpolated mode under the Cartesian coordinate system
+This command needs to combine with other motion commands to obtain the starting point of an arc trajectory
+  
+- Parameters: 
 
-- 格式：Arc(X1,Y1,Z1,A1,B1,C1,X2,Y2,Z2,A2,B2,C2)
+  | Parameter | Type   | Description                                       |
+  | --------- | ------ | ------------------------------------------------- |
+  | X1        | double | X1-axis coordinates of arc center point, unit: mm |
+  | Y1        | double | Y1-axis coordinates of arc center point, unit: mm |
+  | Z1        | double | Z1-axis coordinates of arc center point, unit: mm |
+  | A1        | double | A1-axis coordinates of arc center point, unit: °  |
+  | B1        | double | B1-axis coordinates of arc center point, unit: °  |
+  | C1        | double | C1-axis coordinates of arc center point, unit: °  |
+  | X2        | double | X2-axis coordinates of arc ending point, unit: mm |
+  | Y2        | double | Y2-axis coordinates of arc ending point, unit: mm |
+  | Z2        | double | Z2-axis coordinates of arc ending point, unit: mm |
+  | A2        | double | A2-axis coordinates of arc ending point, unit: °  |
+  | B2        | double | B2-axis coordinates of arc ending point, unit: °  |
+  | C2        | double | C2-axis coordinates of arc ending point, unit: °  |
 
-- 参数数量：12
-
-- 支持端口：30003
-
-- 参数详解：12
-
-  | 参数名  | 类型     | 含义                  |
-  | ---- | ------ | ------------------- |
-  | X1   | double | 表示圆弧中间点X1 轴位置，单位：毫米 |
-  | Y1   | double | 表示圆弧中间点Y1 轴位置，单位：毫米 |
-  | Z1   | double | 表示圆弧中间点Z1 轴位置，单位：毫米 |
-  | A1   | double | 表示圆弧中间点A1 轴位置，单位：度  |
-  | B1   | double | 表示圆弧中间点B1 轴位置，单位：度  |
-  | C1   | double | 表示圆弧中间点C1 轴位置，单位：度  |
-  | X2   | double | 表示圆弧结束点X2 轴位置，单位：毫米 |
-  | Y2   | double | 表示圆弧结束点Y2 轴位置，单位：毫米 |
-  | Z2   | double | 表示圆弧结束点Z2 轴位置，单位：毫米 |
-  | A2   | double | 表示圆弧结束点A2 轴位置，单位：度  |
-  | B2   | double | 表示圆弧结束点B2 轴位置，单位：度  |
-  | C2   | double | 表示圆弧结束点C2 轴位置，单位：度  |
-
-- 示例：
+- Supporting port: 30003
 
 ## 4.10 Circle
 
-- 功能：：整圆运动，需结合其他运动指令完成整圆运动。
+- Function: Circle(count,X1,Y1,Z1,A1,B1,C1,X2,Y2,Z2,A2,B2,C2)
 
-- 格式：Circle(count,X1,Y1,Z1,A1,B1,C1,X2,Y2,Z2,A2,B2,C2)
+- Description: circular movement. This command needs to combine with other motion commands
 
-- 参数数量：13
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                   |
+  | --------- | ------ | ----------------------------- |
+  | count     | int    | number of circles             |
+  | X1        | double | X1-axis coordinates, unit: mm |
+  | Y1        | double | Y1-axis coordinates, unit: mm |
+  | Z1        | double | Z1-axis coordinates, unit: mm |
+  | A1        | double | A1-axis coordinates, unit: °  |
+  | B1        | double | B1-axis coordinates, unit: °  |
+  | C1        | double | C1-axis coordinates, unit: °  |
+  | X2        | double | X2-axis coordinates, unit: mm |
+  | Y2        | double | Y2-axis coordinates, unit: mm |
+  | Z2        | double | Z2-axis coordinates, unit: mm |
+  | A2        | double | A2-axis coordinates, unit: °  |
+  | B2        | double | B2-axis coordinates, unit: °  |
+  | C2        | double | C2-axis coordinates, unit: °  |
 
-- 参数详解：13
-
-  | 参数名   | 类型     | 含义           |
-  | ----- | ------ | ------------ |
-  | count | int    | 整圆个数         |
-  | X1    | double | X1 轴位置，单位：毫米 |
-  | Y1    | double | Y1 轴位置，单位：毫米 |
-  | Z1    | double | Z1 轴位置，单位：毫米 |
-  | A1    | double | A1 轴位置，单位：度  |
-  | B1    | double | B1 轴位置，单位：度  |
-  | C1    | double | C1 轴位置，单位：度  |
-  | X2    | double | X2 轴位置，单位：毫米 |
-  | Y2    | double | Y2 轴位置，单位：毫米 |
-  | Z2    | double | Z2 轴位置，单位：毫米 |
-  | A2    | double | A2 轴位置，单位：度  |
-  | B2    | double | B2 轴位置，单位：度  |
-  | C2    | double | C2 轴位置，单位：度  |
-
-- 示例：
-
+- Supporting port: 30003
 
 
 ## 4.11 ServoJ
 
-- 功能：基于关节空间的动态跟随命令。
+- Function: ServoJ(J11,J12,J13,J14,J15,J16)
 
-- 格式：ServoJ(J11,J12,J13,J14,J15,J16)
+- Description: dynamic following command based on joint space
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                    |
+  | --------- | ------ | ------------------------------ |
+  | J11       | double | J11 coordinates of P1, unit: ° |
+  | J12       | double | J12 coordinates of P1, unit: ° |
+  | J13       | double | J13 coordinates of P1, unit: ° |
+  | J14       | double | J14 coordinates of P1, unit: ° |
+  | J15       | double | J15 coordinates of P1, unit: ° |
+  | J16       | double | J16 coordinates of P1, unit: ° |
 
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义              |
-  | ---- | ------ | --------------- |
-  | J11  | double | 点J11 轴位置，单位：度   |
-  | J12  | double | P1点J12 轴位置，单位：度 |
-  | J13  | double | P1点J13 轴位置，单位：度 |
-  | J14  | double | P1点J14 轴位置，单位：度 |
-  | J15  | double | P1点J15 轴位置，单位：度 |
-  | J16  | double | P1点J16 轴位置，单位：度 |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   ServoJ(0,0,-90,0,90,0)
-
+  ```
 ## 4.12 ServoP
 
-- 功能：基于笛卡尔空间的动态跟随命令。
+- Function: ServoP(X1,Y1,Z1,A1,B1,C1)
 
-- 格式：ServoP(X1,Y1,Z1,A1,B1,C1)
+- Description: dynamic following command based on Cartesian space
 
-- 参数数量：6
+- Parameters: 
 
-- 支持端口：30003
+  | Parameter | Type   | Description                   |
+  | --------- | ------ | ----------------------------- |
+  | X1        | double | X1-axis coordinates, unit: mm |
+  | Y1        | double | Y1-axis coordinates, unit: mm |
+  | Z1        | dou    | Z1-axis coordinates, unit: mm |
+  | A1        | double | A1-axis coordinates, unit: °  |
+  | B1        | double | B1-axis coordinates, unit: °  |
+  | C1        | double | C1-axis coordinates, unit: °  |
 
-- 参数详解：6
-
-  | 参数名  | 类型     | 含义           |
-  | ---- | ------ | ------------ |
-  | X1   | double | X 1轴位置，单位：毫米 |
-  | Y1   | double | Y 1轴位置，单位：毫米 |
-  | Z1   | double | Z1 轴位置，单位：毫米 |
-  | A1   | double | A 1轴位置，单位：度  |
-  | B1   | double | B1 轴位置，单位：度  |
-  | C1   | double | C 1轴位置，单位：度  |
-
-- 示例：
-
+- Supporting port: 30003
+  
+- Example
+  
+  ```
   ServoP(-500,100,200,150,0,90）
-
-
-## 4.13 Sync
-
-- 功能：阻塞程序执行队列指令，待所有队列指令执行完才返回。
-- 格式：Sync()
-- 参数数量：0
-- 支持端口：30003
-
-## 4.14 StartTrace
-
-- 功能：轨迹拟合。
-
-- 格式：StartTrace(traceName)
-
-- 参数数量：1
-
-- 支持端口：30003
-
-- 参数详解：1
-
-  | 参数名       | 类型     | 含义                                       |
-  | --------- | ------ | ---------------------------------------- |
-  | traceName | string | 轨迹文件名（含后缀）<br /> 轨迹路径存放在/dobot/userdata/project/process/trajectory/ |
-
-- 示例：，
-
-  local recv_string=”demo.json”
-
-  local P1 = GetTraceStartPose(recv_string)
-
-  JointMoveJ(P1)
-
-  StartTrace(recv_string)
-
-## 4.15 StartPath
-
-- 功能：轨迹复现。
-
-- 格式：StartPath(traceName,const,cart)
-
-- 参数数量：1
-
-- 支持端口：30003
-
-- 参数详解：1
-
-  | 参数名       | 类型     | 含义                                       |
-  | --------- | ------ | ---------------------------------------- |
-  | traceName | string | 轨迹文件名（含后缀）<br /> 轨迹路径存放在/dobot/userdata/project/process/trajectory/ |
-  | const     | int    | const=1时，匀速复现，轨迹中的停顿及死区会被移除;<br />const=0时，按照原速复现； |
-  | cart      | int    | cart=1时，按笛卡尔路径复现；<br />cart=0时，按关节路径复现；  |
-
-- 示例：按照原速复现，按笛卡尔路径匀速复现
-
-  local recv_string=”demo.json”
-
-  local P1 = GetPathStartPose(recv_string)
-
-  Go(P1)
-
-  StartPath(recv_string,0,1)
-
-  
-
-  
-
-
-
-
-
+  ```
 
 
 
