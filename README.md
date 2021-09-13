@@ -4,8 +4,9 @@
 
 CR robots now support two remote control modes: **remote I/O mode** and **remote Modbus mode**. For details about the control mode, please see Software Usage Instructions > Settings > Remote Control in *Dobot-CR-Series Robot-App-User-Guide-V3.7*. 
 
-The above two modes are mainly for the **remote control of running scripts**. As the communication based on TCP/IP has high reliability, strong practicability and high performance with low cost, many industrial automation projects have a wide demand for control robots that support TCP/IP protocol. So CR robots, designed on the basis of TCP/IP protocol, provide rich interfaces for interaction with external devices.
+The above two modes are mainly for the **remote control of running scripts**. As the communication based on TCP/IP has high reliability, strong practicability and high performance with low cost, many industrial automation projects have a wide demand for control robots that support TCP/IP protocol. So CR / MG400 / M1Pro robots, designed on the basis of TCP/IP protocol, provide rich interfaces for interaction with external devices.
 
+For the support of TCP/IP protocol, the controller version of CR series robot shall be v3.5.1.9 or above, and the controller version of MG400 / M1Pro Robot shall be v1.5.4.0 or above.
 # 2. Message Format
 
 According to the design, CR robots will open 29999 and 30003 server ports; 29999 server port (hereinafter referred to as Dashboard port) is responsible for receiving some simple instructions by sending and receiving one by one. That is, **after receiving the agreed message format from the client, the Dashboard port will give feedback to the client.** 30003 server port (hereinafter referred to as the real-time feedback port) **feeds back the robot information every 8 ms. It only receives the agreed message format from the client but does not give feedback.**
